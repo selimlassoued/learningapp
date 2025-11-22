@@ -2,7 +2,6 @@ package iset.example.learningapp.activities;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -15,6 +14,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.bumptech.glide.Glide;
 import iset.example.learningapp.R;
 import iset.example.learningapp.adapters.CourseSectionsAdapter;
+import iset.example.learningapp.database.CourseDAO;
 import iset.example.learningapp.models.Course;
 import iset.example.learningapp.models.CourseSection;
 import iset.example.learningapp.models.PdfDocument;
@@ -49,11 +49,15 @@ public class CourseDetailActivity extends AppCompatActivity
 
     private Course course;
     private CourseSectionsAdapter sectionsAdapter;
+    private CourseDAO courseDAO;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_course_detail);
+
+        // Initialiser le DAO
+        courseDAO = new CourseDAO(this);
 
         initViews();
         setupToolbar();
@@ -61,7 +65,7 @@ public class CourseDetailActivity extends AppCompatActivity
         // Récupérer l'ID du cours depuis l'intent
         int courseId = getIntent().getIntExtra(EXTRA_COURSE_ID, -1);
 
-        // Charger les données du cours (mock pour l'instant)
+        // Charger les données du cours depuis SQLite
         loadCourseData(courseId);
     }
 
@@ -92,9 +96,15 @@ public class CourseDetailActivity extends AppCompatActivity
     }
 
     private void loadCourseData(int courseId) {
-        // TODO: Remplacer par appel API Retrofit
-        course = getMockCourse();
-        displayCourseData();
+        // Charger le cours depuis SQLite
+        course = courseDAO.getCourseById(courseId);
+
+        if (course != null) {
+            displayCourseData();
+        } else {
+            Toast.makeText(this, "Cours non trouvé", Toast.LENGTH_SHORT).show();
+            finish();
+        }
     }
 
     private void displayCourseData() {
@@ -153,15 +163,38 @@ public class CourseDetailActivity extends AppCompatActivity
     }
 
     private void enrollToCourse() {
-        // TODO: Appel API pour inscription
-        course.setEnrolled(true);
-        updateEnrollButton();
-        Toast.makeText(this, "Inscription réussie !", Toast.LENGTH_SHORT).show();
+        // Inscrire au cours via SQLite
+        boolean success = courseDAO.enrollCourse(course.getId());
+        if (success) {
+            course.setEnrolled(true);
+            updateEnrollButton();
+            Toast.makeText(this, "Inscription réussie !", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "Vous êtes déjà inscrit", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void openCourseContent() {
-        // TODO: Ouvrir le premier contenu du cours
-        Toast.makeText(this, "Ouverture du cours...", Toast.LENGTH_SHORT).show();
+        // Ouvrir la première vidéo du premier section
+        if (course.getSections() != null && !course.getSections().isEmpty()) {
+            CourseSection firstSection = course.getSections().get(0);
+            if (firstSection.getVideos() != null && !firstSection.getVideos().isEmpty()) {
+                Video firstVideo = firstSection.getVideos().get(0);
+                Intent intent = new Intent(this, VideoPlayerActivity.class);
+                intent.putExtra(VideoPlayerActivity.EXTRA_VIDEO_URL, firstVideo.getUrl());
+                intent.putExtra(VideoPlayerActivity.EXTRA_VIDEO_TITLE, firstVideo.getTitle());
+                startActivity(intent);
+            } else if (firstSection.getPdfDocument() != null) {
+                // Si pas de vidéo, ouvrir le PDF
+                PdfDocument pdf = firstSection.getPdfDocument();
+                Intent intent = new Intent(this, PdfViewerActivity.class);
+                intent.putExtra(PdfViewerActivity.EXTRA_PDF_URL, pdf.getUrl());
+                intent.putExtra(PdfViewerActivity.EXTRA_PDF_TITLE, pdf.getTitle());
+                startActivity(intent);
+            }
+        } else {
+            Toast.makeText(this, "Aucun contenu disponible", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
